@@ -1,2 +1,6 @@
 .env
 backups/
+
+# Généré par `docker compose run --rm builder` depuis config/ et src/.
+# Versionné malgré tout : permet d'importer le workflow sans rien installer.
+# workflows/

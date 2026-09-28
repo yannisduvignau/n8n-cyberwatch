@@ -102,6 +102,29 @@ score moyen produit du bruit et mérite d'être retirée.
 
 ---
 
+## Structure du projet
+
+```
+config/     réglages : sources, lexique de scoring, paramètres généraux
+src/        code des nœuds Code, un fichier par nœud
+build/      script d'assemblage config + src -> workflow JSON
+sql/        schéma et vues, appliqués à la création de la base
+scripts/    provisionnement de n8n au démarrage
+workflows/  JSON généré — ne pas éditer à la main
+```
+
+Le workflow n'est pas écrit directement en JSON : il est **assemblé** depuis
+`config/` et `src/`. Éditer `workflows/veille-cyber-ue.json` fonctionne, mais
+la modification sera écrasée au prochain build.
+
+```bash
+docker compose run --rm builder            # reconstruit
+docker compose run --rm builder --check    # vérifie sans écrire
+```
+
+Le build refuse d'écrire si un nœud est orphelin, si une connexion pointe
+vers un nœud inexistant, ou si un secret s'est glissé dans le JSON.
+
 ## Fonctionnement
 
 ```
@@ -157,13 +180,25 @@ connu ne l'écrase pas.
 
 ### Réglages courants
 
-| Pour changer | Aller dans |
-|---|---|
-| la fréquence | nœud **Toutes les 2 h** |
-| la sensibilité | `SEUIL_MIN` dans **Scoring par axe** |
-| le seuil d'alerte Discord | nœud **Score élevé ?** (8 par défaut) |
-| la fenêtre temporelle | `MAX_AGE_DAYS` dans **Collecte des flux** |
-| les sources | nœud **Sources** |
+Tout se règle dans `config/`, pas dans l'interface n8n :
+
+| Pour changer | Fichier | Clé |
+|---|---|---|
+| les sources | `config/sources.yaml` | — |
+| la sensibilité du scoring | `config/lexique.yaml` | `seuils.minimum` |
+| le lexique d'un axe | `config/lexique.yaml` | `axes.<axe>` |
+| la fréquence | `config/workflow.yaml` | `planification.intervalle_heures` |
+| le seuil d'alerte Discord | `config/workflow.yaml` | `notification.seuil_alerte` |
+| la fenêtre temporelle | `config/workflow.yaml` | `collecte.age_max_jours` |
+
+Puis reconstruire et déployer :
+
+```bash
+docker compose run --rm builder
+docker compose up -d --force-recreate n8n-init
+```
+
+Voir `config/README.md` pour le détail de chaque fichier.
 
 ---
 
