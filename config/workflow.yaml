@@ -1,0 +1,40 @@
+# ---------------------------------------------------------------------------
+# Réglages généraux du workflow.
+#
+# Ce fichier ne contient AUCUN secret : le webhook Discord et les accès
+# base vivent dans .env et dans les credentials n8n.
+#
+# Après modification : docker compose run --rm builder
+# ---------------------------------------------------------------------------
+
+# Nom affiché dans l'interface n8n.
+nom: "Veille — NIS2 · CRA · PQC · Cloud souverain"
+
+planification:
+  # Intervalle entre deux collectes, en heures.
+  intervalle_heures: 2
+
+collecte:
+  # Âge maximal d'un article, en jours. Les blogs qui publient moins
+  # souvent deviennent invisibles au-delà : monter cette valeur les fait
+  # réapparaître, au prix de redites à chaque cycle.
+  age_max_jours: 7
+  # Délai d'attente par flux, en millisecondes.
+  timeout_ms: 15000
+  # Téléchargements simultanés. Au-delà de ~10, certains hébergeurs
+  # commencent à renvoyer des 429.
+  concurrence: 6
+  # Garde-fou sur les flux fleuves : entrées lues par flux et par cycle.
+  max_articles_par_flux: 40
+
+notification:
+  # Score à partir duquel un article part sur Discord.
+  seuil_alerte: 8
+  # Score à partir duquel l'embed passe en rouge (« très élevé »).
+  seuil_urgent: 15
+
+base:
+  # Nom du credential Postgres tel que créé dans n8n. Doit correspondre à
+  # celui que provisionne scripts/init-n8n.sh.
+  credential: "Postgres — base veille"
+  credential_id: "veille-db"

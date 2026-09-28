@@ -1,0 +1,186 @@
+# ---------------------------------------------------------------------------
+# n8n — veille « Régulation & souveraineté cyber UE »
+#
+#   docker compose up -d        démarrage
+#   docker compose logs -f n8n  logs
+#   docker compose down         arrêt (les volumes sont conservés)
+#
+# Interface : http://localhost:5678
+# ---------------------------------------------------------------------------
+
+services:
+  # --- Base INTERNE de n8n : workflows, credentials, historique
+  #     d'exécutions. Ne contient aucune donnée de veille.
+  postgres:
+    image: postgres:16-alpine
+    container_name: n8n-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:1.68.0
+    container_name: n8n
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      veille-db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:5678:5678"   # écoute en local uniquement
+    environment:
+      # --- Connexion base
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: ${POSTGRES_DB}
+      DB_POSTGRESDB_USER: ${POSTGRES_USER}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
+
+      # --- Fuseau : le Schedule Trigger et les dates affichées s'y réfèrent
+      GENERIC_TIMEZONE: Europe/Paris
+      TZ: Europe/Paris
+
+      # --- Sécurité
+      #     ENCRYPTION_KEY chiffre les credentials stockés en base.
+      #     La perdre = devoir ressaisir tous les credentials.
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      N8N_SECURE_COOKIE: "false"          # autorisé car on reste en HTTP local
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"  # requis : les nœuds Code lisent $env
+
+      # --- Secrets exposés aux nœuds Code via $env
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL}
+
+      # --- Rétention : sans purge, la table d'exécutions grossit sans fin
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: 336          # heures (14 jours)
+      EXECUTIONS_DATA_SAVE_ON_SUCCESS: all
+      EXECUTIONS_DATA_SAVE_ON_ERROR: all
+
+      # --- Divers
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      # Les nœuds Code s'exécutent dans le processus n8n. Le task runner
+      # isolé (N8N_RUNNERS_ENABLED) n'expose pas fetch() à ces nœuds, or la
+      # collecte des flux en dépend.
+      N8N_RUNNERS_ENABLED: "false"
+      NODE_OPTIONS: "--max-old-space-size=2048"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./workflows:/workflows:ro   # import : voir README
+      - ./backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5678/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # --- Build : reconstruit workflows/*.json depuis config/ et src/.
+  #     Ne démarre pas avec la stack (profil « tools ») :
+  #       docker compose run --rm builder
+  #       docker compose run --rm builder --check
+  builder:
+    image: python:3.12-alpine
+    container_name: veille-builder
+    profiles: ["tools"]
+    working_dir: /projet
+    volumes:
+      - ./config:/projet/config:ro
+      - ./src:/projet/src:ro
+      - ./build:/projet/build:ro
+      - ./workflows:/projet/workflows
+    entrypoint: ["/bin/sh", "/projet/build/entrypoint.sh"]
+
+  # --- Provisionnement : crée le credential Postgres et importe le workflow,
+  #     puis s'arrête. Évite toute saisie manuelle dans l'interface.
+  #     Idempotent : relancer la stack ne crée pas de doublon.
+  n8n-init:
+    image: docker.n8n.io/n8nio/n8n:1.68.0
+    container_name: n8n-init
+    restart: "no"
+    depends_on:
+      n8n:
+        condition: service_healthy
+    environment:
+      # Mêmes base et clé que n8n : le credential doit atterrir au même
+      # endroit, chiffré avec la même clé.
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: ${POSTGRES_DB}
+      DB_POSTGRESDB_USER: ${POSTGRES_USER}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      # Identifiants de la base de veille, injectés dans le credential.
+      VEILLE_DB: ${VEILLE_DB}
+      VEILLE_USER: ${VEILLE_USER}
+      VEILLE_PASSWORD: ${VEILLE_PASSWORD}
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./workflows:/workflows:ro
+      - ./scripts:/scripts:ro
+    entrypoint: ["/bin/sh", "/scripts/init-n8n.sh"]
+
+  # --- Base MÉTIER : les articles de veille. Séparée de celle de n8n pour
+  #     que les données survivent à toute manipulation de l'outil.
+  #     Les scripts de sql/ sont joués à la création du volume.
+  veille-db:
+    image: postgres:16-alpine
+    container_name: veille-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${VEILLE_DB}
+      POSTGRES_USER: ${VEILLE_USER}
+      POSTGRES_PASSWORD: ${VEILLE_PASSWORD}
+    volumes:
+      - veille_data:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "127.0.0.1:5433:5432"   # accès local pour psql / DBeaver
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${VEILLE_USER} -d ${VEILLE_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # --- Exploration et tableaux de bord sur la base de veille.
+  #     Metabase garde sa propre configuration dans sa base dédiée.
+  metabase:
+    image: metabase/metabase:v0.50.21
+    container_name: metabase
+    restart: unless-stopped
+    depends_on:
+      veille-db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      MB_DB_TYPE: h2
+      MB_DB_FILE: /metabase-data/metabase.db
+      JAVA_TIMEZONE: Europe/Paris
+    volumes:
+      - metabase_data:/metabase-data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+volumes:
+  n8n_data:
+  postgres_data:
+  veille_data:
+  metabase_data:

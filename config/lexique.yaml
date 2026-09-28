@@ -1,0 +1,256 @@
+# ---------------------------------------------------------------------------
+# Lexique de scoring.
+#
+# Chaque axe a trois cercles concentriques :
+#   coeur       le terme désigne le sujet lui-même          3 pts
+#   peripherie  le terme gravite autour du sujet            2 pts
+#   signaux     indice faible, à confirmer par le contexte  1 pt
+#
+# Un terme trouvé dans le titre compte ×2 : un sujet annoncé dès le titre
+# est traité de front, alors qu'une occurrence dans le corps peut n'être
+# qu'une mention de passage.
+#
+# Après modification : docker compose run --rm builder
+# ---------------------------------------------------------------------------
+
+seuils:
+  # Score minimal sur un axe pour que l'article soit tagué de cet axe.
+  axe: 3
+  # Score total minimal pour que l'article soit conservé.
+  # Baisser => plus de bruit ; monter => resserre sur le cœur du sujet.
+  minimum: 3
+
+poids:
+  coeur: 3
+  peripherie: 2
+  signaux: 1
+  bonus_titre: 2
+
+axes:
+
+  NIS2:
+    coeur:
+      - NIS2
+      - NIS 2
+      - directive 2022/2555
+      - loi résilience
+      - projet de loi résilience
+      - entités essentielles
+      - entités importantes
+      - essential entities
+      - important entities
+    peripherie:
+      - ANSSI
+      - MonEspaceNIS2
+      - ReCyF
+      - Référentiel Cyber France
+      - transposition
+      - directive REC
+      - entités critiques
+      - critical entities
+      - DORA
+      - CERT-FR
+      - "notification d'incident"
+      - incident reporting
+      - commission spéciale
+    signaux:
+      - article 16 bis
+      - chiffrement de bout en bout
+      - porte dérobée
+      - backdoor
+      - CJUE
+      - "procédure d'infraction"
+      - infringement
+      - "décret d'application"
+      - collectivités territoriales
+      - Latombe
+      - CSNP
+
+  CRA:
+    coeur:
+      - Cyber Resilience Act
+      - règlement 2024/2847
+      - 2024/2847
+      - produits comportant des éléments numériques
+      - products with digital elements
+    peripherie:
+      - CRA
+      - SBOM
+      - marquage CE
+      - CE marking
+      - normes harmonisées
+      - harmonised standards
+      - CEN-CENELEC
+      - ENISA
+      - actively exploited
+      - activement exploitées
+      - single reporting platform
+      - conformity assessment
+      - évaluation de la conformité
+      - vulnerability handling
+      - gestion des vulnérabilités
+    signaux:
+      - open source steward
+      - organismes notifiés
+      - notified bodies
+      - acte délégué
+      - delegated act
+      - implementing act
+      - "acte d'exécution"
+      - secure by design
+      - support period
+
+  PQC:
+    coeur:
+      - post-quantique
+      - post-quantum
+      - PQC
+      - ML-KEM
+      - ML-DSA
+      - SLH-DSA
+      - FIPS 203
+      - FIPS 204
+      - FIPS 205
+    peripherie:
+      - Kyber
+      - Dilithium
+      - SPHINCS+
+      - FN-DSA
+      - HQC
+      - hybridation
+      - hybrid key exchange
+      - crypto-agilité
+      - crypto-agility
+      - harvest now decrypt later
+      - quantum-safe
+      - NIST
+      - BSI
+      - QKD
+    signaux:
+      - FIPS 206
+      - X25519MLKEM768
+      - CNSA 2.0
+      - Q-Day
+      - CRQC
+      - ordinateur quantique
+      - quantum computer
+      - inventaire cryptographique
+      - cryptographic inventory
+      - CBOM
+      - IETF
+
+  Cloud souverain:
+    coeur:
+      - SecNumCloud
+      - EUCS
+      - cloud souverain
+      - sovereign cloud
+      - Cloud Act
+      - cloud de confiance
+    peripherie:
+      - extraterritorial
+      - extraterritoriales
+      - FISA
+      - section 702
+      - Data Act
+      - Gaia-X
+      - S3NS
+      - NumSpot
+      - OVHcloud
+      - Outscale
+      - hyperscaler
+      - Data Privacy Framework
+      - doctrine cloud au centre
+      - Health Data Hub
+      - qualification
+    signaux:
+      - Schrems
+      - PCLOB
+      - Cloud and AI Development Act
+      - souveraineté numérique
+      - digital sovereignty
+      - immunité
+      - CISPE
+      - EUDI
+
+# Termes qui disqualifient un article, quel que soit son score.
+exclusions:
+  - "offre d'emploi"
+  - job offer
+  - recrutement
+  - we are hiring
+  - webinaire
+  - webinar
+  - sponsored
+  - publi-rédactionnel
+  - code promo
+  - market size
+  - market share
+  - CAGR
+  - forecast to 20
+  - market report
+  - quarterly results
+  - earnings call
+  - Canada Revenue Agency
+  - "Dora l'exploratrice"
+
+# ---------------------------------------------------------------------------
+# Ancrage européen
+#
+# « sovereign cloud » est un terme mondial : Oracle en Inde ou un opérateur
+# du Golfe le revendiquent aussi. Sans ancrage, ces articles atteignent le
+# seuil alors que la veille porte sur la souveraineté *européenne*.
+#
+# Un article sans marqueur UE est pénalisé, pas écarté : un vrai sujet
+# européen reste détectable même s'il ne nomme jamais l'Europe, il lui
+# faudra simplement plus de termes du lexique pour passer.
+# ---------------------------------------------------------------------------
+ancrage_ue:
+  # Axes concernés. PQC et CRA reposent sur un vocabulaire déjà spécifique,
+  # ils n'en ont pas besoin.
+  axes:
+    - Cloud souverain
+  # Points retirés à un article sans aucun marqueur européen.
+  malus: 4
+  marqueurs:
+    - europe
+    - européen
+    - européenne
+    - european
+    - UE
+    - EU
+    - Bruxelles
+    - Brussels
+    - commission européenne
+    - european commission
+    - parlement européen
+    - european parliament
+    - France
+    - français
+    - française
+    - french
+    - Allemagne
+    - German
+    - Germany
+    - Belgique
+    - Belgium
+    - Pays-Bas
+    - Netherlands
+    - Italie
+    - Italy
+    - Espagne
+    - Spain
+    - ANSSI
+    - BSI
+    - ENISA
+    - CNIL
+    - RGPD
+    - GDPR
+    - SecNumCloud
+    - EUCS
+    - Gaia-X
+    - NIS2
+    - NIS 2
+    - Cyber Resilience Act
+    - DORA
+    - eIDAS
