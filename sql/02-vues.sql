@@ -1,17 +1,16 @@
 -- ---------------------------------------------------------------------------
--- Vues d'analyse — prêtes à l'emploi dans Metabase.
--- Elles apparaissent comme des tables : aucune requête à écrire pour
--- construire un premier tableau de bord.
+-- Analysis views — ready to use in Metabase.
+-- They show up as tables: no query to write to build a first dashboard.
 -- ---------------------------------------------------------------------------
 
--- Inbox : ce qu'il reste à trier, le plus pertinent d'abord.
+-- Inbox: what is left to triage, most relevant first.
 CREATE OR REPLACE VIEW v_inbox AS
 SELECT id, published_at, score, themes, title, source, domain, url, weak_signal
 FROM   articles
 WHERE  status = 'À évaluer'
 ORDER  BY score DESC, published_at DESC;
 
--- Volume par jour et par axe : révèle les pics d'actualité réglementaire.
+-- Volume per day and per topic: reveals spikes in regulatory news.
 CREATE OR REPLACE VIEW v_volume_par_jour AS
 SELECT date_trunc('day', published_at)::date AS jour,
        theme,
@@ -22,8 +21,8 @@ WHERE  published_at IS NOT NULL
 GROUP  BY jour, theme
 ORDER  BY jour DESC, articles DESC;
 
--- Sources les plus productives, et leur qualité moyenne.
--- Une source au score moyen bas produit du volume sans pertinence.
+-- Most productive sources, and their average quality.
+-- A source with a low average score produces volume without relevance.
 CREATE OR REPLACE VIEW v_sources AS
 SELECT feed,
        source_type,
@@ -35,8 +34,8 @@ FROM   articles
 GROUP  BY feed, source_type
 ORDER  BY articles DESC;
 
--- Mots-clés les plus fréquents : montre quels termes du lexique
--- travaillent réellement, et lesquels ne se déclenchent jamais.
+-- Most frequent keywords: shows which lexicon terms actually do the work,
+-- and which never fire.
 CREATE OR REPLACE VIEW v_mots_cles AS
 SELECT mot,
        count(*)             AS occurrences,
@@ -45,7 +44,7 @@ FROM   articles, unnest(keywords) AS mot
 GROUP  BY mot
 ORDER  BY occurrences DESC;
 
--- Santé des flux sur 7 jours : un flux à 0 succès est à retirer.
+-- Feed health over 7 days: a feed with 0 successes should be removed.
 CREATE OR REPLACE VIEW v_sante_flux AS
 SELECT feed,
        count(*)                                  AS executions,
@@ -60,7 +59,7 @@ WHERE  run_at > now() - interval '7 days'
 GROUP  BY feed
 ORDER  BY echecs DESC, articles_produits DESC;
 
--- Répartition par statut : avancement du tri.
+-- Breakdown by status: triage progress.
 CREATE OR REPLACE VIEW v_avancement AS
 SELECT status,
        count(*)                                    AS articles,
@@ -69,12 +68,12 @@ FROM   articles
 GROUP  BY status
 ORDER  BY articles DESC;
 
--- Sujets repris par plusieurs médias.
+-- Stories covered by several outlets.
 --
--- Deux articles sont rapprochés quand leurs titres partagent au moins 60 %
--- de leur vocabulaire significatif. Le regroupement est indicatif : à la
--- lecture de décider s'il s'agit du même sujet, d'un angle différent ou de
--- deux pays distincts. Rien n'est supprimé automatiquement.
+-- Two articles are paired when their titles share at least 60% of their
+-- significant vocabulary. The grouping is only a hint: it is up to the
+-- reader to decide whether it is the same story, a different angle or two
+-- different countries. Nothing is deleted automatically.
 CREATE OR REPLACE VIEW v_sujets_repris AS
 WITH paires AS (
     SELECT a.id                AS id_a,

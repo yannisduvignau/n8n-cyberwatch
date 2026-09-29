@@ -1,22 +1,21 @@
 # ---------------------------------------------------------------------------
-# Sources surveillées par la veille.
+# Sources monitored by the watch.
 #
-# Ajouter un flux : recopier un bloc, remplir les quatre champs.
-# Retirer un flux : supprimer son bloc, ou le commenter pour le garder
-# sous la main.
+# Add a feed: copy a block, fill in the four fields.
+# Remove a feed: delete its block, or comment it out to keep it at hand.
 #
-#   name      libellé affiché en base et dans Discord
-#   url       flux RSS ou Atom
-#   category  axe principal présumé (« Multi » si généraliste). Indicatif :
-#             c'est le scoring qui décide du thème réel de chaque article.
-#   type      nature de la source, utile pour pondérer la confiance
+#   name      label shown in the database and in Discord
+#   url       RSS or Atom feed
+#   category  presumed main topic ("Multi" if general-purpose). Only a hint:
+#             scoring decides the actual theme of each article.
+#   type      kind of source, useful to weigh trust
 #
-# Après modification : docker compose run --rm builder
+# After a change: docker compose run --rm builder
 # ---------------------------------------------------------------------------
 
 sources:
 
-  # --- Recherches Google News (pas de compte requis, fenêtre 7 jours)
+  # --- Google News searches (no account required, 7-day window)
   - name: GN FR – NIS2 / loi Résilience
     url: "https://news.google.com/rss/search?q=%22NIS2%22+OR+%22NIS+2%22+OR+%22loi+r%C3%A9silience%22+OR+%22projet+de+loi+r%C3%A9silience%22+when%3A7d&hl=fr&gl=FR&ceid=FR:fr"
     category: NIS2
@@ -54,7 +53,7 @@ sources:
     category: Cloud souverain
     type: Google News
 
-  # --- Institutionnel
+  # --- Institutional
   - name: CERT-FR
     url: "https://www.cert.ssi.gouv.fr/feed/"
     category: NIS2
@@ -72,7 +71,7 @@ sources:
     category: NIS2
     type: Institutionnel
 
-  # --- Écosystème et associations professionnelles
+  # --- Ecosystem and professional associations
   - name: Clusif
     url: "https://clusif.fr/feed/"
     category: Multi
@@ -90,7 +89,7 @@ sources:
     category: NIS2
     type: Écosystème
 
-  # --- Juridique (cabinets d'avocats)
+  # --- Legal (law firms)
   - name: Ledieu Avocats – Cyber
     url: "https://ledieu-avocats.fr/category/cyber-securite-securite-des-systemes-d-information/feed/"
     category: Multi
@@ -104,7 +103,7 @@ sources:
     category: Multi
     type: Juridique
 
-  # --- Presse spécialisée
+  # --- Specialist press
   - name: Help Net Security
     url: "https://www.helpnetsecurity.com/feed/"
     category: Multi
@@ -126,7 +125,7 @@ sources:
     category: Multi
     type: Presse généraliste
 
-  # --- Curateurs (veilles déjà filtrées par des humains)
+  # --- Curators (watches already filtered by humans)
   - name: CyberVeille CH
     url: "https://cyberveille.ch/index.xml"
     category: Multi
@@ -140,7 +139,7 @@ sources:
     category: Cloud souverain
     type: Curation
 
-  # --- Experts et blogueurs
+  # --- Experts and bloggers
   - name: Cloudflare – post-quantum
     url: "https://blog.cloudflare.com/tag/post-quantum/rss/"
     category: PQC
@@ -166,7 +165,7 @@ sources:
     category: Multi
     type: Expert
 
-  # --- À activer une fois vos comptes créés
+  # --- To enable once your accounts are created
   # - name: Inoreader – NIS2
   #   url: https://www.inoreader.com/stream/user/ID/tag/NIS2
   #   category: NIS2

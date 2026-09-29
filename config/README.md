@@ -1,18 +1,18 @@
 # Configuration
 
-Trois fichiers, aucun secret. Les secrets vivent dans `.env` (webhook
-Discord, mots de passe) et dans les credentials n8n.
+Three files, no secrets. Secrets live in `.env` (Discord webhook, passwords)
+and in the n8n credentials.
 
-Après toute modification :
+After any change:
 
 ```bash
-docker compose run --rm builder              # reconstruit le workflow
-docker compose up -d --force-recreate n8n-init   # le déploie dans n8n
+docker compose run --rm builder                  # rebuild the workflow
+docker compose up -d --force-recreate n8n-init   # deploy it to n8n
 ```
 
-## `sources.yaml` — les flux surveillés
+## `sources.yaml` — the monitored feeds
 
-Ajouter un flux : recopier un bloc de quatre lignes.
+To add a feed, copy a four-line block:
 
 ```yaml
   - name: ANSSI – Actualités
@@ -21,40 +21,40 @@ Ajouter un flux : recopier un bloc de quatre lignes.
     type: Institutionnel
 ```
 
-`category` est indicatif : c'est le scoring qui détermine le thème réel de
-chaque article. `type` sert à pondérer la confiance accordée à la source.
+`category` is only a hint: scoring decides the actual theme of each article.
+`type` is used to weigh the trust given to the source.
 
-Pour retirer un flux temporairement, le commenter plutôt que le supprimer :
-il reste sous la main.
+To remove a feed temporarily, comment it out rather than deleting it, so it
+stays at hand.
 
-## `lexique.yaml` — le scoring
+## `lexique.yaml` — scoring
 
-Le cœur du système. Chaque axe a trois cercles :
+The heart of the system. Each topic has three circles:
 
-| Cercle | Sens | Points |
+| Circle | Meaning | Points |
 |---|---|---|
-| `coeur` | le terme désigne le sujet lui-même | 3 |
-| `peripherie` | le terme gravite autour du sujet | 2 |
-| `signaux` | indice faible, à confirmer | 1 |
+| `coeur` (core) | the term names the subject itself | 3 |
+| `peripherie` (periphery) | the term revolves around the subject | 2 |
+| `signaux` (signals) | weak hint, to be confirmed | 1 |
 
-Un terme trouvé dans le titre compte double.
+A term found in the title counts double.
 
-Réglages utiles :
+Useful adjustments:
 
-- **trop de bruit** → monter `seuils.minimum`
-- **on rate des choses** → descendre `seuils.minimum`, ou déplacer des termes
-  de `signaux` vers `peripherie`
-- **un terme ne se déclenche jamais** → la vue `v_mots_cles` le montre
+- **too much noise** → raise `seuils.minimum`
+- **things are being missed** → lower `seuils.minimum`, or move terms from
+  `signaux` to `peripherie`
+- **a term never fires** → the `v_mots_cles` view shows it
 
-L'`ancrage_ue` pénalise les articles sans marqueur européen sur les axes
-listés. Il existe parce que « sovereign cloud » est un terme mondial : sans
-lui, des articles sur Oracle en Inde franchissaient le seuil.
+`ancrage_ue` penalises articles with no European marker on the listed
+topics. It exists because "sovereign cloud" is a global term: without it,
+articles about Oracle in India crossed the threshold.
 
-## `workflow.yaml` — les réglages généraux
+## `workflow.yaml` — general settings
 
-Fréquence de collecte, fenêtre temporelle, seuils de notification,
-concurrence réseau. Chaque valeur est commentée sur place.
+Collection frequency, time window, notification thresholds, network
+concurrency. Each value is commented in place.
 
-Le `seuil_alerte` est utilisé à deux endroits (le nœud IF et le libellé du
-message Discord) : le build les garde synchronisés, d'où l'intérêt de ne le
-définir qu'ici.
+`seuil_alerte` is used in two places (the IF node and the Discord message
+label): the build keeps them in sync, which is why it should only be defined
+here.

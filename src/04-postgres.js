@@ -1,19 +1,19 @@
 /**
- * PRÉPARATION DE L'INSERTION EN BASE
+ * DATABASE INSERT PREPARATION
  *
- * Aplatit chaque article en colonnes prêtes pour la table `articles`.
- * Les tableaux (themes, keywords, score_explain) sont sérialisés au format
- * littéral Postgres, et score_detail en JSON : le nœud Postgres transmet
- * les valeurs telles quelles, c'est donc ici qu'on les met en forme.
+ * Flattens each article into columns ready for the `articles` table.
+ * Arrays (themes, keywords, score_explain) are serialised as Postgres
+ * literals, and score_detail as JSON: the Postgres node passes values
+ * through as is, so this is where they get formatted.
  *
- * Le dédoublonnage est assuré par la contrainte UNIQUE sur dedup_key :
- * réinsérer un article connu ne crée pas de doublon et n'écrase pas le
- * statut de lecture (ON CONFLICT DO NOTHING côté requête).
+ * Deduplication is handled by the UNIQUE constraint on dedup_key:
+ * re-inserting a known article creates no duplicate and does not overwrite
+ * its reading status (ON CONFLICT DO NOTHING in the query).
  */
 
 /**
- * Sérialise un tableau JS en littéral Postgres : {"a","b"}.
- * Les guillemets et antislashs internes sont échappés.
+ * Serialises a JS array as a Postgres literal: {"a","b"}.
+ * Inner quotes and backslashes are escaped.
  */
 function toPgArray(values) {
   const items = (values ?? [])
@@ -23,7 +23,7 @@ function toPgArray(values) {
   return `{${items.join(',')}}`;
 }
 
-/** Postgres refuse les octets nuls, que certains flux mal encodés glissent. */
+/** Postgres rejects null bytes, which some badly encoded feeds slip in. */
 const clean = (s, max) => {
   const t = String(s ?? '').replace(/\0/g, '').trim();
   return max ? t.slice(0, max) : t;

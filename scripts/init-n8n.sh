@@ -1,19 +1,19 @@
 #!/bin/sh
 # ---------------------------------------------------------------------------
-# Provisionnement de n8n au démarrage : credential Postgres et workflow.
+# n8n provisioning at startup: Postgres credential and workflow.
 #
-# Exécuté par le service `n8n-init`, après que n8n soit sain. Idempotent :
-# l'import écrase l'entrée existante par son id, donc relancer la stack ne
-# crée pas de doublon.
+# Run by the `n8n-init` service once n8n is healthy. Idempotent: the import
+# overwrites the existing entry by its ID, so restarting the stack does not
+# create duplicates.
 #
-# Le credential est écrit via `n8n import:credentials`, qui le chiffre avec
-# N8N_ENCRYPTION_KEY. Écrire directement en base imposerait de reproduire ce
-# chiffrement à la main : fragile, et dépendant de la version de n8n.
+# The credential is written via `n8n import:credentials`, which encrypts it
+# with N8N_ENCRYPTION_KEY. Writing directly to the database would mean
+# reproducing that encryption by hand: fragile, and tied to the n8n version.
 # ---------------------------------------------------------------------------
 set -e
 
 CRED_FILE=$(mktemp)
-# Nettoyage garanti : le fichier contient le mot de passe en clair.
+# Guaranteed cleanup: the file holds the password in plain text.
 trap 'rm -f "$CRED_FILE"' EXIT INT TERM
 
 cat > "$CRED_FILE" <<JSON
@@ -36,12 +36,12 @@ cat > "$CRED_FILE" <<JSON
 ]
 JSON
 
-echo "→ credential Postgres"
+echo "→ Postgres credential"
 n8n import:credentials --input="$CRED_FILE"
 
 if [ -f /workflows/_import.json ]; then
-  echo "→ workflow de veille"
+  echo "→ monitoring workflow"
   n8n import:workflow --input=/workflows/_import.json
 fi
 
-echo "✓ provisionnement terminé"
+echo "✓ provisioning complete"

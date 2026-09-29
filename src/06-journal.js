@@ -1,19 +1,19 @@
 /**
- * JOURNAL DE COLLECTE
+ * COLLECTION LOG
  *
- * Reprend le bilan par flux produit lors de la collecte et l'aplatit pour
- * la table `feed_runs`. Sans cette trace, un flux mort depuis trois semaines
- * passe inaperçu : la vue v_sante_flux s'appuie dessus.
+ * Takes the per-feed report produced during collection and flattens it for
+ * the `feed_runs` table. Without this trace, a feed that has been dead for
+ * three weeks goes unnoticed: the v_sante_flux view relies on it.
  *
- * Ce nœud lit la sortie du nœud « Collecte des flux » via la clé technique
- * `_feedReport`, portée par le premier item.
+ * This node reads the output of the "Collecte des flux" node via the
+ * technical key `_feedReport`, carried by the first item.
  */
 
 const items = $('Collecte des flux').all();
 const report = items[0]?.json?._feedReport ?? [];
 
 if (!report.length) {
-  // Aucun rapport : rien à journaliser, on ne fait pas échouer l'exécution.
+  // No report: nothing to log, don't fail the execution.
   return [];
 }
 

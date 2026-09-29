@@ -1,29 +1,31 @@
-## Veille — Régulation & souveraineté cyber UE
+## Watch — EU cyber regulation & sovereignty
 
-Axes : **NIS2** · **CRA** · **PQC** · **Cloud souverain**
+Topics: **NIS2** · **CRA** · **PQC** · **Cloud souverain**
 
-### Chaîne de traitement
-1. **Sources** — catalogue des flux RSS/Atom, un item par source
-2. **Collecte** — télécharge les flux en parallèle, normalise, filtre à 7 jours
-3. **Scoring** — lexique en 3 cercles par axe, tag multi-axes
-4. **Archiver** — insertion dans la base `veille`, table `articles`
-5. **Discord** — les articles de score ≥ 8 partent dans le salon d'équipe
-6. **Journal** — bilan par flux dans `feed_runs`, pour repérer les flux morts
+### Processing chain
+1. **Sources** — catalogue of RSS/Atom feeds, one item per source
+2. **Collecte** — downloads feeds in parallel, normalises, keeps the last 7 days
+3. **Scoring** — 3-circle lexicon per topic, multi-topic tagging
+4. **Archiver** — insert into the `veille` database, `articles` table
+5. **Discord** — articles scoring ≥ 8 are posted to the team channel
+6. **Journal** — per-feed report in `feed_runs`, to spot dead feeds
 
-Le dédoublonnage est assuré par la contrainte `UNIQUE (dedup_key)` en base :
-un article déjà connu est ignoré sans écraser son statut de lecture.
+Deduplication is handled by the `UNIQUE (dedup_key)` constraint in the
+database: an already known article is skipped without overwriting its
+reading status.
 
 ### Configuration
-Aucun secret dans ce workflow. Le webhook vient de `$env.DISCORD_WEBHOOK_URL`,
-la base d'un credential Postgres à créer dans n8n (Settings → Credentials) :
-hôte `veille-db`, port `5432`, base `veille`.
+No secrets in this workflow. The webhook comes from `$env.DISCORD_WEBHOOK_URL`,
+the database from a Postgres credential in n8n (Settings → Credentials):
+host `veille-db`, port `5432`, database `veille`.
 
-### Lecture des résultats
-Metabase sur <http://localhost:3000> — les vues `v_inbox`, `v_sources`,
-`v_volume_par_jour` et `v_sante_flux` sont prêtes à l'emploi.
+### Reading the results
+Metabase at <http://localhost:3000> — the `v_inbox`, `v_sources`,
+`v_volume_par_jour` and `v_sante_flux` views are ready to use.
 
-### Réglages courants
-- fréquence → nœud **Toutes les 2 h**
-- sensibilité → `SEUIL_MIN` dans **Scoring par axe**
-- seuil d'alerte → nœud **Score élevé ?** (8 par défaut)
-- sources → nœud **Sources**
+### Common settings
+Edit the files in `config/`, then rebuild (`docker compose run --rm builder`):
+- frequency → `workflow.yaml`, node **Toutes les 2 h**
+- sensitivity → `lexique.yaml` (`seuils.minimum`), node **Scoring par axe**
+- alert threshold → `workflow.yaml` (`notification.seuil_alerte`), node **Score élevé ?** (8 by default)
+- sources → `sources.yaml`, node **Sources**

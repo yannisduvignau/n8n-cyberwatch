@@ -1,304 +1,305 @@
-# Veille cyber UE — n8n
+# EU cyber watch — n8n
 
-Veille automatisée sur quatre axes : **NIS2**, **Cyber Resilience Act**,
-**cryptographie post-quantique** et **cloud souverain**.
+Automated monitoring of four topics: **NIS2**, the **Cyber Resilience Act**,
+**post-quantum cryptography** and **sovereign cloud**.
 
-Toutes les 2 heures, le workflow interroge ~34 flux RSS/Atom, note chaque
-article selon un lexique par axe, archive le tout dans PostgreSQL et pousse
-les articles les plus pertinents sur Discord. Metabase sert à l'exploration
-et aux tableaux de bord.
+Every 2 hours, the workflow polls ~34 RSS/Atom feeds, scores each article
+against a per-topic lexicon, archives everything in PostgreSQL and pushes the
+most relevant articles to Discord. Metabase is used for exploration and
+dashboards.
 
-Tout est auto-hébergé : aucune donnée de veille ne sort de la machine.
+Everything is self-hosted: no monitoring data ever leaves the machine.
 
 ---
 
 ## Services
 
-| Service | Rôle | Accès |
+| Service | Role | Access |
 |---|---|---|
-| `n8n` | orchestration du workflow | <http://localhost:5678> |
-| `veille-db` | base métier : articles, journal de collecte | `localhost:5433` |
-| `metabase` | exploration, tableaux de bord | <http://localhost:3000> |
-| `n8n-postgres` | base interne de n8n (workflows, credentials) | — |
+| `n8n` | workflow orchestration | <http://localhost:5678> |
+| `veille-db` | business database: articles, collection log | `localhost:5433` |
+| `metabase` | exploration, dashboards | <http://localhost:3000> |
+| `n8n-postgres` | n8n's internal database (workflows, credentials) | — |
 
-Les deux bases sont **volontairement séparées** : les données de veille ne
-doivent pas cohabiter avec l'état interne de l'outil, pour survivre à une
-mise à jour, une purge d'exécutions ou une réinstallation de n8n.
+The two databases are **deliberately separate**: monitoring data must not
+live alongside the tool's internal state, so that it survives an upgrade, an
+execution purge or a reinstall of n8n.
 
-Tous les ports n'écoutent que sur `127.0.0.1`.
+All ports listen on `127.0.0.1` only.
 
 ---
 
-## Démarrage
+## Getting started
 
 ```bash
 cp .env.example .env
-# puis remplir .env (voir ci-dessous)
+# then fill in .env (see below)
 
 docker compose up -d
 ```
 
-Au premier démarrage, tout est provisionné automatiquement :
+On first start, everything is provisioned automatically:
 
-- le schéma SQL (`sql/`) est appliqué à la création de la base — 2 tables et
-  6 vues d'analyse ;
-- le service `n8n-init` crée le credential Postgres et importe le workflow,
-  puis s'arrête.
+- the SQL schema (`sql/`) is applied when the database is created — 2 tables
+  and 7 analysis views;
+- the `n8n-init` service creates the Postgres credential and imports the
+  workflow, then exits.
 
-Il ne reste qu'à créer le compte propriétaire sur <http://localhost:5678>.
-Le credential apparaît alors dans *Settings → Credentials*, rattaché à votre
-projet personnel, et le workflow est prêt à être activé.
+All that's left is to create the owner account at <http://localhost:5678>.
+The credential then shows up in *Settings → Credentials*, attached to your
+personal project, and the workflow is ready to be activated.
 
-Un `docker compose up -d` ultérieur rejoue le provisionnement sans créer de
-doublon : l'import écrase les entrées par leur identifiant.
+A later `docker compose up -d` replays the provisioning without creating
+duplicates: the import overwrites entries by their ID.
 
-### Remplir le `.env`
+### Filling in `.env`
 
-| Variable | Comment l'obtenir |
+| Variable | How to get it |
 |---|---|
-| `POSTGRES_PASSWORD` | `openssl rand -hex 16` — base interne n8n |
-| `VEILLE_PASSWORD` | `openssl rand -hex 16` — base de veille |
-| `N8N_ENCRYPTION_KEY` | `openssl rand -hex 32` — **à conserver**, elle déchiffre les credentials |
-| `DISCORD_WEBHOOK_URL` | Salon Discord → Paramètres → Intégrations → Créer un webhook |
+| `POSTGRES_PASSWORD` | `openssl rand -hex 16` — n8n internal database |
+| `VEILLE_PASSWORD` | `openssl rand -hex 16` — monitoring database |
+| `N8N_ENCRYPTION_KEY` | `openssl rand -hex 32` — **keep it safe**, it decrypts the credentials |
+| `DISCORD_WEBHOOK_URL` | Discord channel → Settings → Integrations → Create Webhook |
 
-Après toute modification du `.env` : `docker compose up -d` (un `restart` ne
-recharge pas les variables).
+After any change to `.env`: `docker compose up -d` (a `restart` does not
+reload the variables).
 
-### Réimporter le workflow après modification
+### Re-importing the workflow after a change
 
-Le provisionnement se rejoue seul, mais pour forcer un réimport immédiat :
+Provisioning replays on its own, but to force an immediate re-import:
 
 ```bash
 docker compose up -d --force-recreate n8n-init
 ```
 
-Pour importer une version modifiée depuis l'interface : menu ⋯ →
+To import a modified version from the UI: ⋯ menu →
 *Import from File* → `workflows/veille-cyber-ue.json`.
 
 ---
 
-## Connecter Metabase
+## Connecting Metabase
 
-1. Ouvrir <http://localhost:3000>, créer le compte administrateur.
-2. Ajouter une base de données **PostgreSQL** :
-   hôte `veille-db`, port `5432`, base `veille`, utilisateur `veille`,
-   mot de passe = `VEILLE_PASSWORD`.
-3. Les vues apparaissent comme des tables, prêtes à l'emploi.
+1. Open <http://localhost:3000> and create the admin account.
+2. Add a **PostgreSQL** database:
+   host `veille-db`, port `5432`, database `veille`, user `veille`,
+   password = `VEILLE_PASSWORD`.
+3. The views show up as tables, ready to use.
 
-### Vues disponibles
+### Available views
 
-| Vue | Ce qu'elle montre |
+| View | What it shows |
 |---|---|
-| `v_inbox` | ce qu'il reste à trier, le plus pertinent d'abord |
-| `v_volume_par_jour` | volume et score moyen par jour et par axe |
-| `v_sources` | sources les plus productives et leur qualité moyenne |
-| `v_mots_cles` | termes du lexique qui se déclenchent réellement |
-| `v_sante_flux` | flux en échec sur 7 jours, avec la dernière erreur |
-| `v_avancement` | répartition par statut de lecture |
-| `v_sujets_repris` | mêmes sujets couverts par plusieurs médias |
+| `v_inbox` | what is left to triage, most relevant first |
+| `v_volume_par_jour` | volume and average score per day and per topic |
+| `v_sources` | most productive sources and their average quality |
+| `v_mots_cles` | lexicon terms that actually fire |
+| `v_sante_flux` | feeds failing over the last 7 days, with the latest error |
+| `v_avancement` | breakdown by reading status |
+| `v_sujets_repris` | same stories covered by several outlets |
 
-`v_sources` est la plus utile à l'usage : une source à fort volume et faible
-score moyen produit du bruit et mérite d'être retirée.
+`v_sources` is the most useful in practice: a high-volume source with a low
+average score produces noise and deserves to be removed.
 
 ---
 
-## Structure du projet
+## Project layout
 
 ```
-config/     réglages : sources, lexique de scoring, paramètres généraux
-src/        code des nœuds Code, un fichier par nœud
-build/      script d'assemblage config + src -> workflow JSON
-sql/        schéma et vues, appliqués à la création de la base
-scripts/    provisionnement de n8n au démarrage
-workflows/  JSON généré — ne pas éditer à la main
+config/     settings: sources, scoring lexicon, general parameters
+src/        Code node sources, one file per node
+build/      assembly script config + src -> workflow JSON
+sql/        schema and views, applied when the database is created
+scripts/    n8n provisioning at startup
+workflows/  generated JSON — do not edit by hand
 ```
 
-Le workflow n'est pas écrit directement en JSON : il est **assemblé** depuis
-`config/` et `src/`. Éditer `workflows/veille-cyber-ue.json` fonctionne, mais
-la modification sera écrasée au prochain build.
+The workflow is not written directly in JSON: it is **assembled** from
+`config/` and `src/`. Editing `workflows/veille-cyber-ue.json` works, but the
+change will be overwritten by the next build.
 
 ```bash
-docker compose run --rm builder            # reconstruit
-docker compose run --rm builder --check    # vérifie sans écrire
+docker compose run --rm builder            # rebuild
+docker compose run --rm builder --check    # validate without writing
 ```
 
-Le build refuse d'écrire si un nœud est orphelin, si une connexion pointe
-vers un nœud inexistant, ou si un secret s'est glissé dans le JSON.
+The build refuses to write if a node is orphaned, if a connection points to
+a non-existent node, or if a secret has slipped into the JSON.
 
-## Fonctionnement
+## How it works
 
 ```
 Toutes les 2 h
-   └─ Sources ............... catalogue des flux (1 item par source)
-      └─ Collecte des flux .. téléchargement parallèle, parsing, filtre 7 jours
-         ├─ Journal ......... bilan par flux → feed_runs
-         └─ Scoring ......... lexique par axe, calcul du score
+   └─ Sources ............... feed catalogue (1 item per source)
+      └─ Collecte des flux .. parallel download, parsing, 7-day filter
+         ├─ Journal ......... per-feed report → feed_runs
+         └─ Scoring ......... per-topic lexicon, score computation
             ├─ Archiver ..... INSERT ... ON CONFLICT DO NOTHING → articles
             └─ Score ≥ 8 ? .. → Discord
 ```
 
-### Le scoring
+### Scoring
 
-Chaque axe possède un lexique en trois cercles :
+Each topic has a lexicon made of three circles:
 
-| Cercle | Sens | Points |
+| Circle | Meaning | Points |
 |---|---|---|
-| cœur | désigne le sujet lui-même | 3 |
-| périphérie | gravite autour du sujet | 2 |
-| signaux | indice faible à confirmer | 1 |
+| core (`coeur`) | names the subject itself | 3 |
+| periphery (`peripherie`) | revolves around the subject | 2 |
+| signals (`signaux`) | weak hint, to be confirmed | 1 |
 
-Un terme présent dans le **titre compte double** : un sujet annoncé dès le
-titre est traité de front, alors qu'une occurrence dans le corps peut n'être
-qu'une mention de passage.
+A term found in the **title counts double**: a subject announced in the
+title is being addressed head-on, whereas an occurrence in the body may be a
+passing mention.
 
-Un article est retenu si son score total atteint `SEUIL_MIN` (3), et rattaché
-à un axe si son score sur cet axe atteint `SEUIL_AXE` (3). Il peut donc porter
-plusieurs thèmes.
+An article is kept if its total score reaches `SEUIL_MIN` (3), and attached
+to a topic if its score on that topic reaches `SEUIL_AXE` (3). It can
+therefore carry several themes.
 
-**Ancrage européen.** « sovereign cloud » est un terme mondial : sans
-garde-fou, des articles sur Oracle en Inde ou un opérateur du Golfe
-franchissaient le seuil. Un article sans marqueur européen perd 4 points sur
-l'axe *Cloud souverain*. Une pénalité, pas une exclusion : un vrai sujet
-européen qui ne nomme jamais l'Europe reste détectable, il lui faut
-simplement plus de termes.
+**European anchoring.** "Sovereign cloud" is a global term: without a
+safeguard, articles about Oracle in India or a Gulf operator crossed the
+threshold. An article with no European marker loses 4 points on the
+*Cloud souverain* topic. It is a penalty, not an exclusion: a genuinely
+European story that never names Europe is still detectable, it just needs
+more terms.
 
-Le détail du calcul est stocké dans `score_explain` et repris dans les
-messages Discord — on voit toujours *pourquoi* un article a été retenu.
+The breakdown of the computation is stored in `score_explain` and repeated
+in the Discord messages — you can always see *why* an article was kept.
 
-### Trier les articles
+### Triaging articles
 
-Le suivi de lecture se fait avec la colonne `status`
-(`À évaluer`, `Retenu`, `Écarté`, `Archivé`) :
+Reading progress is tracked with the `status` column
+(`À évaluer`, `Retenu`, `Écarté`, `Archivé` — to review, kept, discarded,
+archived):
 
 ```sql
-UPDATE articles SET status = 'Retenu', notes = 'à citer en intro'
+UPDATE articles SET status = 'Retenu', notes = 'quote in the intro'
 WHERE id = 42;
 ```
 
-Ces statuts **survivent aux exécutions suivantes** : réinsérer un article
-connu ne l'écrase pas.
+These statuses **survive subsequent executions**: re-inserting a known
+article does not overwrite it.
 
-### Réglages courants
+### Common settings
 
-Tout se règle dans `config/`, pas dans l'interface n8n :
+Everything is configured in `config/`, not in the n8n UI:
 
-| Pour changer | Fichier | Clé |
+| To change | File | Key |
 |---|---|---|
-| les sources | `config/sources.yaml` | — |
-| la sensibilité du scoring | `config/lexique.yaml` | `seuils.minimum` |
-| le lexique d'un axe | `config/lexique.yaml` | `axes.<axe>` |
-| la fréquence | `config/workflow.yaml` | `planification.intervalle_heures` |
-| le seuil d'alerte Discord | `config/workflow.yaml` | `notification.seuil_alerte` |
-| la fenêtre temporelle | `config/workflow.yaml` | `collecte.age_max_jours` |
+| the sources | `config/sources.yaml` | — |
+| scoring sensitivity | `config/lexique.yaml` | `seuils.minimum` |
+| a topic's lexicon | `config/lexique.yaml` | `axes.<axe>` |
+| the frequency | `config/workflow.yaml` | `planification.intervalle_heures` |
+| the Discord alert threshold | `config/workflow.yaml` | `notification.seuil_alerte` |
+| the time window | `config/workflow.yaml` | `collecte.age_max_jours` |
 
-Puis reconstruire et déployer :
+Then rebuild and deploy:
 
 ```bash
 docker compose run --rm builder
 docker compose up -d --force-recreate n8n-init
 ```
 
-Voir `config/README.md` pour le détail de chaque fichier.
+See `config/README.md` for details on each file.
 
 ---
 
-## Exploitation
+## Operations
 
 ```bash
-docker compose logs -f n8n        # suivre les logs
-docker compose ps                 # état et santé des services
-docker compose restart n8n        # redémarrer
-docker compose down               # arrêter (les volumes sont conservés)
-docker compose down -v            # tout supprimer, données comprises
+docker compose logs -f n8n        # follow the logs
+docker compose ps                 # service state and health
+docker compose restart n8n        # restart
+docker compose down               # stop (volumes are kept)
+docker compose down -v            # delete everything, data included
 ```
 
-Requêter la base directement :
+Querying the database directly:
 
 ```bash
 docker exec -it veille-db psql -U veille -d veille
-# ou depuis la machine hôte, port 5433
+# or from the host machine, port 5433
 psql -h localhost -p 5433 -U veille -d veille
 ```
 
-### Sauvegarde
+### Backups
 
 ```bash
-# données de veille — c'est la sauvegarde qui compte
+# monitoring data — this is the backup that matters
 docker exec veille-db pg_dump -U veille veille > backups/veille-$(date +%F).sql
 
-# configuration n8n (workflows, credentials chiffrés)
+# n8n configuration (workflows, encrypted credentials)
 docker exec n8n-postgres pg_dump -U n8n n8n > backups/n8n-$(date +%F).sql
 ```
 
-Restaurer la base n8n exige la **même** `N8N_ENCRYPTION_KEY`, sinon les
-credentials stockés sont illisibles. La base de veille, elle, n'a pas cette
-contrainte : c'est du SQL ordinaire.
+Restoring the n8n database requires the **same** `N8N_ENCRYPTION_KEY`,
+otherwise the stored credentials are unreadable. The monitoring database has
+no such constraint: it is plain SQL.
 
 ---
 
-## Notes de fonctionnement
+## Operating notes
 
-**Les nœuds Code n'ont pas `fetch`.** Le sandbox de n8n n'expose pas les
-globals de Node : la collecte utilise `this.helpers.httpRequest`, le client
-HTTP fourni par n8n. C'est aussi pourquoi `N8N_RUNNERS_ENABLED` est à `false`
-dans le compose.
+**Code nodes don't have `fetch`.** The n8n sandbox does not expose Node's
+globals: collection uses `this.helpers.httpRequest`, the HTTP client provided
+by n8n. This is also why `N8N_RUNNERS_ENABLED` is set to `false` in the
+compose file.
 
-**Un flux en échec ne bloque rien.** Chaque téléchargement est isolé dans son
-`try/catch` : un 403, un timeout ou un domaine mort est enregistré dans
-`feed_runs` puis ignoré, les autres sources continuent. Pour repérer les flux
-à retirer :
+**A failing feed blocks nothing.** Each download is isolated in its own
+`try/catch`: a 403, a timeout or a dead domain is recorded in `feed_runs`
+and then skipped, and the other sources carry on. To spot feeds that should
+be removed:
 
 ```sql
 SELECT * FROM v_sante_flux WHERE echecs > 0;
 ```
 
-**Les reprises entre médias sont signalées, pas supprimées.** Un même sujet
-couvert par trois médias donne trois lignes. C'est délibéré : j'ai testé la
-fusion automatique par similarité de titres, aucun seuil ne séparait « la
-France transpose NIS2 » de « l'Allemagne transpose NIS2 » sans laisser
-passer de vrais doublons. En veille réglementaire, fusionner à tort fait
-disparaître une information — le coût est asymétrique.
+**Cross-outlet coverage is flagged, not removed.** The same story covered by
+three outlets yields three rows. This is deliberate: I tested automatic
+merging based on title similarity, and no threshold could separate "France
+transposes NIS2" from "Germany transposes NIS2" without letting real
+duplicates through. In regulatory monitoring, a wrong merge makes a piece of
+information disappear — the cost is asymmetric.
 
-La vue `v_sujets_repris` regroupe donc les articles dont les titres
-partagent au moins 60 % de leur vocabulaire, à vous de trancher :
+The `v_sujets_repris` view therefore groups articles whose titles share at
+least 60% of their vocabulary, and leaves the call to you:
 
 ```sql
 SELECT * FROM v_sujets_repris;
--- puis, pour écarter une reprise :
+-- then, to discard a duplicate story:
 UPDATE articles SET status = 'Écarté' WHERE id = 57;
 ```
 
-**Le dédoublonnage strict est garanti par la base.** La contrainte
-`UNIQUE (dedup_key)` et le `ON CONFLICT DO NOTHING` rendent l'insertion
-idempotente : rejouer une exécution ne crée aucun doublon et ne réinitialise
-aucun statut de lecture. C'est plus robuste qu'un historique glissant côté
-n8n, qui peut être purgé ou dériver.
+**Strict deduplication is guaranteed by the database.** The
+`UNIQUE (dedup_key)` constraint and `ON CONFLICT DO NOTHING` make insertion
+idempotent: replaying an execution creates no duplicates and resets no
+reading status. This is more robust than a sliding history on the n8n side,
+which can be purged or drift.
 
-**Les sources peu actives sont invisibles.** Le filtre à 7 jours écarte les
-blogs qui publient moins souvent — le flux Cloudflare post-quantum, par
-exemple, ressort souvent vide. C'est voulu : augmenter `MAX_AGE_DAYS` les
-fait réapparaître, au prix de redites à chaque cycle.
+**Low-activity sources are invisible.** The 7-day filter drops blogs that
+publish less often — the Cloudflare post-quantum feed, for instance, often
+comes back empty. This is intended: raising `collecte.age_max_jours` brings
+them back, at the cost of repeats on every cycle.
 
-**Les liens Google News restent des redirections.** Résoudre l'URL finale
-demande de franchir un mur de consentement qui renvoie une erreur. Le vrai
-éditeur est en revanche récupéré depuis le champ `<source>` du flux : les
-colonnes `source` et `domain` sont donc justes, seul le lien passe par Google.
+**Google News links remain redirects.** Resolving the final URL requires
+getting past a consent wall that returns an error. The real publisher is,
+however, retrieved from the feed's `<source>` field: the `source` and
+`domain` columns are therefore correct, only the link goes through Google.
 
 ---
 
-## Sécurité
+## Security
 
-- Aucun secret dans `workflows/veille-cyber-ue.json` : le webhook vient de
-  `$env`, la base d'un credential n8n. Le fichier est partageable tel quel.
-- Le `.env` est exclu du dépôt par `.gitignore`.
-- Tous les services n'écoutent que sur `127.0.0.1`. Pour un accès distant,
-  passer par un reverse proxy en HTTPS et repasser `N8N_SECURE_COOKIE` à `true`.
-- `N8N_BLOCK_ENV_ACCESS_IN_NODE` est à `false`, ce qu'exige la lecture de
-  `$env` dans les nœuds Code. Les nœuds Code ont donc accès à toutes les
-  variables d'environnement du conteneur : n'y placer que ce qui concerne
-  ce workflow.
-- Le provisionnement écrit le mot de passe de la base dans un fichier
-  temporaire à l'intérieur du conteneur `n8n-init`, supprimé à la sortie du
-  script (`trap`) et de toute façon détruit avec le conteneur. C'est le prix
-  de `n8n import:credentials`, qui ne lit pas depuis l'entrée standard.
-  En déploiement partagé, préférer un gestionnaire de secrets externe.
+- No secrets in `workflows/veille-cyber-ue.json`: the webhook comes from
+  `$env`, the database from an n8n credential. The file can be shared as is.
+- `.env` is excluded from the repository by `.gitignore`.
+- All services listen on `127.0.0.1` only. For remote access, go through an
+  HTTPS reverse proxy and set `N8N_SECURE_COOKIE` back to `true`.
+- `N8N_BLOCK_ENV_ACCESS_IN_NODE` is set to `false`, which reading `$env` in
+  Code nodes requires. Code nodes therefore have access to all of the
+  container's environment variables: only put there what concerns this
+  workflow.
+- Provisioning writes the database password to a temporary file inside the
+  `n8n-init` container, deleted when the script exits (`trap`) and destroyed
+  with the container anyway. That is the price of `n8n import:credentials`,
+  which does not read from standard input. For a shared deployment, prefer
+  an external secrets manager.

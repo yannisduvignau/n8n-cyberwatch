@@ -1,28 +1,28 @@
 /**
- * SCORING PAR AXE
+ * SCORING PER TOPIC
  *
- * Chaque axe de veille possède un lexique en trois cercles concentriques :
+ * Each monitoring topic has a lexicon made of three concentric circles:
  *
- *   coeur       le terme désigne le sujet lui-même          3 pts
- *   peripherie  le terme gravite autour du sujet            2 pts
- *   signaux     indice faible, à confirmer par le contexte  1 pt
+ *   coeur       the term names the subject itself             3 pts
+ *   peripherie  the term revolves around the subject          2 pts
+ *   signaux     weak hint, to be confirmed by the context     1 pt
  *
- * Un terme trouvé dans le titre compte double : un sujet annoncé dès le
- * titre est traité de front, alors qu'une occurrence dans le corps peut
- * n'être qu'une mention de passage.
+ * A term found in the title counts double: a subject announced in the
+ * title is being addressed head-on, whereas an occurrence in the body may
+ * be a passing mention.
  *
- * Un article est :
- *   - rattaché à un axe si son score sur cet axe ≥ SEUIL_AXE ;
- *   - conservé si son score total ≥ SEUIL_MIN ;
- *   - écarté si un terme d'exclusion apparaît (emploi, pub, homonymes).
+ * An article is:
+ *   - attached to a topic if its score on that topic ≥ SEUIL_AXE;
+ *   - kept if its total score ≥ SEUIL_MIN;
+ *   - discarded if an exclusion term appears (jobs, ads, homonyms).
  *
- * Régler la sensibilité : baisser SEUIL_MIN fait remonter plus de bruit,
- * le monter resserre sur les articles franchement dans le sujet.
+ * Tuning sensitivity: lowering SEUIL_MIN lets more noise through, raising
+ * it narrows down to articles squarely on topic.
  */
 
 // ---------------------------------------------------------------------------
-// Tout ce bloc est GÉNÉRÉ depuis config/lexique.yaml au moment du build.
-// Ne pas l'éditer ici : éditer le YAML puis lancer
+// This whole block is GENERATED from config/lexique.yaml at build time.
+// Do not edit it here: edit the YAML then run
 //   docker compose run --rm builder
 // ---------------------------------------------------------------------------
 
@@ -32,7 +32,7 @@ const SEUIL_MIN = /* @@SEUIL_MIN@@ */ 3;
 const POIDS = /* @@POIDS@@ */ {};
 const BONUS_TITRE = /* @@BONUS_TITRE@@ */ 2;
 
-const LIBELLE_CERCLE = { coeur: 'cœur', peripherie: 'périphérie', signaux: 'signal faible' };
+const LIBELLE_CERCLE = { coeur: 'core', peripherie: 'periphery', signaux: 'weak signal' };
 
 const AXES = /* @@AXES@@ */ {};
 
@@ -42,18 +42,18 @@ const MARQUEURS_UE = /* @@MARQUEURS_UE@@ */ [];
 const AXES_ANCRAGE_UE = new Set(/* @@AXES_ANCRAGE_UE@@ */ []);
 const MALUS_HORS_UE = /* @@MALUS_HORS_UE@@ */ 4;
 
-// --- Normalisation et détection -------------------------------------------
+// --- Normalisation and matching --------------------------------------------
 
-/** Minuscules, sans accents : la comparaison se fait sur cette forme. */
+/** Lowercase, no accents: matching is done on this form. */
 const norm = (s) =>
   String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
- * Cherche un terme entouré de non-alphanumériques, pour éviter qu'« ANSSI »
- * ne se déclenche à l'intérieur d'un autre mot. Les regex sont mémoïsées :
- * on teste ~150 termes contre chaque article.
+ * Looks for a term surrounded by non-alphanumerics, so that "ANSSI" does
+ * not fire inside another word. Regexes are memoised: ~150 terms are tested
+ * against each article.
  */
 const RE_CACHE = new Map();
 function contains(haystack, term) {
@@ -65,7 +65,7 @@ function contains(haystack, term) {
   return re.test(haystack);
 }
 
-// --- Traitement ------------------------------------------------------------
+// --- Processing ------------------------------------------------------------
 
 const retenus = [];
 let ecartesExclusion = 0;
@@ -74,8 +74,8 @@ let ecartesScore = 0;
 for (const item of $input.all()) {
   const article = item.json;
 
-  // Item technique émis par la collecte quand aucun article n'est retenu :
-  // il ne porte que le bilan des flux.
+  // Technical item emitted by collection when no article is kept: it only
+  // carries the feed report.
   if (article._empty || !article.title) continue;
 
   const titreNorm = norm(article.title);
@@ -108,18 +108,18 @@ for (const item of $input.all()) {
         scoreAxe += points;
         motsCles.add(terme);
         explication.push(
-          `${terme} (${LIBELLE_CERCLE[cercle]}${dansTitre ? `, titre ×${BONUS_TITRE}` : ''}) +${points}`,
+          `${terme} (${LIBELLE_CERCLE[cercle]}${dansTitre ? `, title ×${BONUS_TITRE}` : ''}) +${points}`,
         );
         if (cercle === 'signaux') signalFaible = true;
       }
     }
 
-    // Sujet mondial revendiqué hors UE : on retire le bonus de titre qui
-    // l'a fait monter, sans descendre sous zéro.
+    // Global subject claimed outside the EU: subtract MALUS_HORS_UE from the
+    // topic score, without going below zero.
     if (scoreAxe > 0 && AXES_ANCRAGE_UE.has(axe) && !ancreUE) {
       const avant = scoreAxe;
       scoreAxe = Math.max(0, scoreAxe - MALUS_HORS_UE);
-      explication.push(`hors périmètre UE −${avant - scoreAxe}`);
+      explication.push(`outside EU scope −${avant - scoreAxe}`);
     }
 
     scoreParAxe[axe] = scoreAxe;
@@ -145,12 +145,12 @@ for (const item of $input.all()) {
   });
 }
 
-// Les articles les plus pertinents en premier : utile à la lecture des
-// exécutions et à l'ordre d'insertion en base.
+// Most relevant articles first: helps when reading executions and sets the
+// database insertion order.
 retenus.sort((a, b) => b.json.score - a.json.score);
 
 console.log(
-  `Scoring : ${retenus.length} retenus · ${ecartesScore} sous le seuil (${SEUIL_MIN}) · ${ecartesExclusion} exclus`,
+  `Scoring: ${retenus.length} kept · ${ecartesScore} below threshold (${SEUIL_MIN}) · ${ecartesExclusion} excluded`,
 );
 
 return retenus;

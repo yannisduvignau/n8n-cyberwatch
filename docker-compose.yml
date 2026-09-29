@@ -1,16 +1,16 @@
 # ---------------------------------------------------------------------------
-# n8n — veille « Régulation & souveraineté cyber UE »
+# n8n — "EU cyber regulation & sovereignty" watch
 #
-#   docker compose up -d        démarrage
+#   docker compose up -d        start
 #   docker compose logs -f n8n  logs
-#   docker compose down         arrêt (les volumes sont conservés)
+#   docker compose down         stop (volumes are kept)
 #
 # Interface : http://localhost:5678
 # ---------------------------------------------------------------------------
 
 services:
-  # --- Base INTERNE de n8n : workflows, credentials, historique
-  #     d'exécutions. Ne contient aucune donnée de veille.
+  # --- n8n's INTERNAL database: workflows, credentials, execution
+  #     history. Holds no monitoring data.
   postgres:
     image: postgres:16-alpine
     container_name: n8n-postgres
@@ -38,9 +38,9 @@ services:
       veille-db:
         condition: service_healthy
     ports:
-      - "127.0.0.1:5678:5678"   # écoute en local uniquement
+      - "127.0.0.1:5678:5678"   # listens locally only
     environment:
-      # --- Connexion base
+      # --- Database connection
       DB_TYPE: postgresdb
       DB_POSTGRESDB_HOST: postgres
       DB_POSTGRESDB_PORT: 5432
@@ -48,36 +48,36 @@ services:
       DB_POSTGRESDB_USER: ${POSTGRES_USER}
       DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
 
-      # --- Fuseau : le Schedule Trigger et les dates affichées s'y réfèrent
+      # --- Time zone: the Schedule Trigger and displayed dates use it
       GENERIC_TIMEZONE: Europe/Paris
       TZ: Europe/Paris
 
-      # --- Sécurité
-      #     ENCRYPTION_KEY chiffre les credentials stockés en base.
-      #     La perdre = devoir ressaisir tous les credentials.
+      # --- Security
+      #     ENCRYPTION_KEY encrypts the credentials stored in the database.
+      #     Losing it = having to re-enter every credential.
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
-      N8N_SECURE_COOKIE: "false"          # autorisé car on reste en HTTP local
-      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"  # requis : les nœuds Code lisent $env
+      N8N_SECURE_COOKIE: "false"          # acceptable since we stay on local HTTP
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"  # required: Code nodes read $env
 
-      # --- Secrets exposés aux nœuds Code via $env
+      # --- Secrets exposed to Code nodes via $env
       DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL}
 
-      # --- Rétention : sans purge, la table d'exécutions grossit sans fin
+      # --- Retention: without pruning, the executions table grows forever
       EXECUTIONS_DATA_PRUNE: "true"
-      EXECUTIONS_DATA_MAX_AGE: 336          # heures (14 jours)
+      EXECUTIONS_DATA_MAX_AGE: 336          # hours (14 days)
       EXECUTIONS_DATA_SAVE_ON_SUCCESS: all
       EXECUTIONS_DATA_SAVE_ON_ERROR: all
 
-      # --- Divers
+      # --- Misc
       N8N_DIAGNOSTICS_ENABLED: "false"
-      # Les nœuds Code s'exécutent dans le processus n8n. Le task runner
-      # isolé (N8N_RUNNERS_ENABLED) n'expose pas fetch() à ces nœuds, or la
-      # collecte des flux en dépend.
+      # Code nodes run inside the n8n process. The isolated task runner
+      # (N8N_RUNNERS_ENABLED) does not expose fetch() to these nodes, and
+      # feed collection depends on it.
       N8N_RUNNERS_ENABLED: "false"
       NODE_OPTIONS: "--max-old-space-size=2048"
     volumes:
       - n8n_data:/home/node/.n8n
-      - ./workflows:/workflows:ro   # import : voir README
+      - ./workflows:/workflows:ro   # import: see README
       - ./backups:/backups
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5678/healthz || exit 1"]
@@ -86,8 +86,8 @@ services:
       retries: 3
       start_period: 40s
 
-  # --- Build : reconstruit workflows/*.json depuis config/ et src/.
-  #     Ne démarre pas avec la stack (profil « tools ») :
+  # --- Build: rebuilds workflows/*.json from config/ and src/.
+  #     Does not start with the stack ("tools" profile):
   #       docker compose run --rm builder
   #       docker compose run --rm builder --check
   builder:
@@ -102,9 +102,9 @@ services:
       - ./workflows:/projet/workflows
     entrypoint: ["/bin/sh", "/projet/build/entrypoint.sh"]
 
-  # --- Provisionnement : crée le credential Postgres et importe le workflow,
-  #     puis s'arrête. Évite toute saisie manuelle dans l'interface.
-  #     Idempotent : relancer la stack ne crée pas de doublon.
+  # --- Provisioning: creates the Postgres credential and imports the
+  #     workflow, then exits. Avoids any manual input in the UI.
+  #     Idempotent: restarting the stack creates no duplicates.
   n8n-init:
     image: docker.n8n.io/n8nio/n8n:1.68.0
     container_name: n8n-init
@@ -113,8 +113,8 @@ services:
       n8n:
         condition: service_healthy
     environment:
-      # Mêmes base et clé que n8n : le credential doit atterrir au même
-      # endroit, chiffré avec la même clé.
+      # Same database and key as n8n: the credential must land in the same
+      # place, encrypted with the same key.
       DB_TYPE: postgresdb
       DB_POSTGRESDB_HOST: postgres
       DB_POSTGRESDB_PORT: 5432
@@ -122,7 +122,7 @@ services:
       DB_POSTGRESDB_USER: ${POSTGRES_USER}
       DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
-      # Identifiants de la base de veille, injectés dans le credential.
+      # Monitoring database credentials, injected into the n8n credential.
       VEILLE_DB: ${VEILLE_DB}
       VEILLE_USER: ${VEILLE_USER}
       VEILLE_PASSWORD: ${VEILLE_PASSWORD}
@@ -132,9 +132,9 @@ services:
       - ./scripts:/scripts:ro
     entrypoint: ["/bin/sh", "/scripts/init-n8n.sh"]
 
-  # --- Base MÉTIER : les articles de veille. Séparée de celle de n8n pour
-  #     que les données survivent à toute manipulation de l'outil.
-  #     Les scripts de sql/ sont joués à la création du volume.
+  # --- BUSINESS database: the monitoring articles. Kept separate from
+  #     n8n's so the data survives anything done to the tool.
+  #     The scripts in sql/ run when the volume is created.
   veille-db:
     image: postgres:16-alpine
     container_name: veille-db
@@ -147,7 +147,7 @@ services:
       - veille_data:/var/lib/postgresql/data
       - ./sql:/docker-entrypoint-initdb.d:ro
     ports:
-      - "127.0.0.1:5433:5432"   # accès local pour psql / DBeaver
+      - "127.0.0.1:5433:5432"   # local access for psql / DBeaver
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${VEILLE_USER} -d ${VEILLE_DB}"]
       interval: 10s
@@ -155,8 +155,8 @@ services:
       retries: 5
       start_period: 10s
 
-  # --- Exploration et tableaux de bord sur la base de veille.
-  #     Metabase garde sa propre configuration dans sa base dédiée.
+  # --- Exploration and dashboards on the monitoring database.
+  #     Metabase keeps its own configuration in its dedicated database.
   metabase:
     image: metabase/metabase:v0.50.21
     container_name: metabase

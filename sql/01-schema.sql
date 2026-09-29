@@ -1,24 +1,24 @@
 -- ---------------------------------------------------------------------------
--- Base de veille — exécutée automatiquement à la création du volume.
+-- Monitoring database — run automatically when the volume is created.
 --
--- Cette base est distincte de celle de n8n : les données de veille ne
--- doivent pas cohabiter avec l'état interne de l'outil (workflows,
--- credentials, historique d'exécutions).
+-- This database is separate from n8n's: monitoring data must not live
+-- alongside the tool's internal state (workflows, credentials, execution
+-- history).
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS articles (
     id              BIGSERIAL PRIMARY KEY,
 
-    -- Clé de dédoublonnage (titre normalisé). L'unicité est garantie ici
-    -- plutôt que par un historique glissant côté n8n : une contrainte de
-    -- base ne peut pas dériver ni être purgée par erreur.
+    -- Deduplication key (normalised title). Uniqueness is enforced here
+    -- rather than by a sliding history on the n8n side: a database
+    -- constraint cannot drift or be purged by mistake.
     dedup_key       TEXT        NOT NULL UNIQUE,
 
-    -- Vocabulaire significatif du titre, trié. Sert à regrouper les reprises
-    -- d'un même sujet par plusieurs médias (voir v_sujets_repris). Ce n'est
-    -- PAS une clé de dédoublonnage : la fusion automatique a été écartée,
-    -- aucun seuil ne distinguant « la France transpose NIS2 » de
-    -- « l'Allemagne transpose NIS2 » sans faire disparaître d'information.
+    -- Significant vocabulary of the title, sorted. Used to group coverage of
+    -- the same story by several outlets (see v_sujets_repris). It is NOT a
+    -- deduplication key: automatic merging was ruled out, as no threshold
+    -- told "France transposes NIS2" apart from "Germany transposes NIS2"
+    -- without making information disappear.
     title_vocab     TEXT,
 
     title           TEXT        NOT NULL,
@@ -31,30 +31,30 @@ CREATE TABLE IF NOT EXISTS articles (
     source_type     TEXT,
     excerpt         TEXT,
 
-    -- Date de publication déclarée par le flux.
+    -- Publication date declared by the feed.
     published_at    TIMESTAMPTZ,
-    -- Date de collecte : published_at peut être absente ou fantaisiste.
+    -- Collection date: published_at may be missing or bogus.
     collected_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
 
     score           INTEGER     NOT NULL DEFAULT 0,
     weak_signal     BOOLEAN     NOT NULL DEFAULT false,
 
-    -- Un article peut relever de plusieurs axes.
+    -- An article can belong to several topics.
     themes          TEXT[]      NOT NULL DEFAULT '{}',
     keywords        TEXT[]      NOT NULL DEFAULT '{}',
 
-    -- Score par axe : {"NIS2": 6, "CRA": 0, ...}
+    -- Score per topic: {"NIS2": 6, "CRA": 0, ...}
     score_detail    JSONB       NOT NULL DEFAULT '{}'::jsonb,
-    -- Détail du calcul, pour comprendre pourquoi l'article est remonté.
+    -- Breakdown of the computation, to understand why the article surfaced.
     score_explain   TEXT[]      NOT NULL DEFAULT '{}',
 
-    -- Suivi de lecture, équivalent de la colonne Statut de Notion.
+    -- Reading progress, equivalent to Notion's Status column.
     status          TEXT        NOT NULL DEFAULT 'À évaluer'
                                 CHECK (status IN ('À évaluer', 'Retenu', 'Écarté', 'Archivé')),
     notes           TEXT
 );
 
--- Tri par défaut de l'inbox : les plus pertinents d'abord.
+-- Default inbox ordering: most relevant first.
 CREATE INDEX IF NOT EXISTS idx_articles_score      ON articles (score DESC, published_at DESC);
 CREATE INDEX IF NOT EXISTS idx_articles_published  ON articles (published_at DESC);
 CREATE INDEX IF NOT EXISTS idx_articles_status     ON articles (status);
@@ -62,8 +62,8 @@ CREATE INDEX IF NOT EXISTS idx_articles_themes     ON articles USING GIN (themes
 CREATE INDEX IF NOT EXISTS idx_articles_keywords   ON articles USING GIN (keywords);
 
 -- ---------------------------------------------------------------------------
--- Journal de collecte : sans lui, un flux mort depuis trois semaines passe
--- inaperçu. Une ligne par flux et par exécution.
+-- Collection log: without it, a feed that has been dead for three weeks
+-- goes unnoticed. One row per feed and per execution.
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS feed_runs (

@@ -1,23 +1,23 @@
 # ---------------------------------------------------------------------------
-# Lexique de scoring.
+# Scoring lexicon.
 #
-# Chaque axe a trois cercles concentriques :
-#   coeur       le terme désigne le sujet lui-même          3 pts
-#   peripherie  le terme gravite autour du sujet            2 pts
-#   signaux     indice faible, à confirmer par le contexte  1 pt
+# Each topic has three concentric circles:
+#   coeur       the term names the subject itself             3 pts
+#   peripherie  the term revolves around the subject          2 pts
+#   signaux     weak hint, to be confirmed by the context     1 pt
 #
-# Un terme trouvé dans le titre compte ×2 : un sujet annoncé dès le titre
-# est traité de front, alors qu'une occurrence dans le corps peut n'être
-# qu'une mention de passage.
+# A term found in the title counts ×2: a subject announced in the title is
+# being addressed head-on, whereas an occurrence in the body may be a
+# passing mention.
 #
-# Après modification : docker compose run --rm builder
+# After a change: docker compose run --rm builder
 # ---------------------------------------------------------------------------
 
 seuils:
-  # Score minimal sur un axe pour que l'article soit tagué de cet axe.
+  # Minimum score on a topic for the article to be tagged with that topic.
   axe: 3
-  # Score total minimal pour que l'article soit conservé.
-  # Baisser => plus de bruit ; monter => resserre sur le cœur du sujet.
+  # Minimum total score for the article to be kept.
+  # Lower => more noise; higher => narrows down to the core of the subject.
   minimum: 3
 
 poids:
@@ -173,7 +173,7 @@ axes:
       - CISPE
       - EUDI
 
-# Termes qui disqualifient un article, quel que soit son score.
+# Terms that disqualify an article, whatever its score.
 exclusions:
   - "offre d'emploi"
   - job offer
@@ -195,22 +195,22 @@ exclusions:
   - "Dora l'exploratrice"
 
 # ---------------------------------------------------------------------------
-# Ancrage européen
+# European anchoring
 #
-# « sovereign cloud » est un terme mondial : Oracle en Inde ou un opérateur
-# du Golfe le revendiquent aussi. Sans ancrage, ces articles atteignent le
-# seuil alors que la veille porte sur la souveraineté *européenne*.
+# "Sovereign cloud" is a global term: Oracle in India or a Gulf operator
+# claim it too. Without anchoring, those articles reach the threshold even
+# though the watch is about *European* sovereignty.
 #
-# Un article sans marqueur UE est pénalisé, pas écarté : un vrai sujet
-# européen reste détectable même s'il ne nomme jamais l'Europe, il lui
-# faudra simplement plus de termes du lexique pour passer.
+# An article with no EU marker is penalised, not discarded: a genuinely
+# European story remains detectable even if it never names Europe, it will
+# simply need more lexicon terms to pass.
 # ---------------------------------------------------------------------------
 ancrage_ue:
-  # Axes concernés. PQC et CRA reposent sur un vocabulaire déjà spécifique,
-  # ils n'en ont pas besoin.
+  # Topics concerned. PQC and CRA rely on an already specific vocabulary,
+  # they don't need it.
   axes:
     - Cloud souverain
-  # Points retirés à un article sans aucun marqueur européen.
+  # Points removed from an article with no European marker at all.
   malus: 4
   marqueurs:
     - europe
