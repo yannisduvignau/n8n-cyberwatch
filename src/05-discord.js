@@ -1,23 +1,31 @@
 /**
- * MESSAGE DISCORD
+ * DISCORD MESSAGE
  *
- * Construit l'embed envoyé au salon d'équipe pour les articles à score élevé.
- * Le nœud suivant se contente de POSTer `payload` sur le webhook.
+ * Builds the embed sent to the team channel for high-scoring articles.
+ * The next node simply POSTs `payload` to the webhook.
  *
- * Contraintes Discord respectées ici : titre 256 car., description 4096,
- * valeur de champ 1024, footer 2048.
+ * Discord limits enforced here: title 256 chars, description 4096,
+ * field value 1024, footer 2048.
  */
 
 const COULEURS = {
-  signalFaible: 0x2ecc71, // vert : à surveiller
-  tresEleve:    0xe74c3c, // rouge : à lire en priorité
-  eleve:        0x3498db, // bleu : lecture normale
+  signalFaible: 0x2ecc71, // green: to keep an eye on
+  tresEleve:    0xe74c3c, // red: read first
+  eleve:        0x3498db, // blue: normal reading
 };
 
 const SEUIL_TRES_ELEVE = /* @@SEUIL_URGENT@@ */ 15;
 const SEUIL_ALERTE = /* @@SEUIL_ALERTE@@ */ 8;
 
-/** Tronque en coupant proprement, sans laisser de mot à moitié. */
+/**
+ * Escapes Discord markdown. Feed titles/excerpts are untrusted: without this a
+ * crafted item could inject a masked link — [ANSSI officiel](https://evil) —
+ * or styling into the team channel. Discord consumes the backslash, so escaped
+ * text still renders as the plain original.
+ */
+const escapeMd = (s) => String(s ?? '').replace(/[\\`*_~|[\]()]/g, '\\$&');
+
+/** Truncates cleanly, without leaving half a word. */
 function tronquer(texte, max) {
   const s = String(texte ?? '');
   if (s.length <= max) return s;
@@ -26,10 +34,10 @@ function tronquer(texte, max) {
   return `${espace > max * 0.6 ? coupe.slice(0, espace) : coupe}…`;
 }
 
-const dateFr = (iso) => {
+const formatDate = (iso) => {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleString('fr-FR', {
+  return d.toLocaleString('en-GB', {
     timeZone: 'Europe/Paris',
     dateStyle: 'medium',
     timeStyle: 'short',
@@ -38,7 +46,7 @@ const dateFr = (iso) => {
 
 return $input.all().map(({ json: article }) => {
   const niveau =
-    article.score >= SEUIL_TRES_ELEVE ? 'très élevé' : article.score >= SEUIL_ALERTE ? 'élevé' : 'modéré';
+    article.score >= SEUIL_TRES_ELEVE ? 'very high' : article.score >= SEUIL_ALERTE ? 'high' : 'moderate';
 
   const couleur = article.weakSignal
     ? COULEURS.signalFaible
@@ -46,10 +54,10 @@ return $input.all().map(({ json: article }) => {
       ? COULEURS.tresEleve
       : COULEURS.eleve;
 
-  // Répartition du score entre les axes, axes à zéro omis.
+  // Score breakdown across topics, zero-score topics omitted.
   const repartition = Object.entries(article.scoreDetail ?? {})
     .filter(([, v]) => v > 0)
-    .map(([axe, v]) => `**${axe}** : ${v}`)
+    .map(([axe, v]) => `**${axe}**: ${v}`)
     .join(' · ');
 
   const detail = tronquer(
@@ -62,21 +70,21 @@ return $input.all().map(({ json: article }) => {
       payload: {
         embeds: [
           {
-            title: tronquer(article.title, 256),
+            title: tronquer(escapeMd(article.title), 256),
             url: article.url,
-            description: tronquer(article.excerpt, 300) || undefined,
+            description: tronquer(escapeMd(article.excerpt), 300) || undefined,
             color: couleur,
             fields: [
-              { name: '📅 Publication', value: dateFr(article.date), inline: true },
-              { name: '✍️ Auteur', value: tronquer(article.author || article.source || '—', 100), inline: true },
-              { name: '📰 Source', value: tronquer(article.source || '—', 100), inline: true },
+              { name: '📅 Published', value: formatDate(article.date), inline: true },
+              { name: '✍️ Author', value: tronquer(escapeMd(article.author || article.source || '—'), 100), inline: true },
+              { name: '📰 Source', value: tronquer(escapeMd(article.source || '—'), 100), inline: true },
               { name: `🎯 Score ${article.score} — ${niveau}`, value: detail || '—' },
             ],
             footer: {
               text: tronquer(
                 `${(article.themes ?? []).join(' · ')}`
-                + `${article.weakSignal ? ' · 🌱 signal faible' : ''}`
-                + ' · barème : cœur 3 · périphérie 2 · signal 1 · ×2 si dans le titre',
+                + `${article.weakSignal ? ' · 🌱 weak signal' : ''}`
+                + ' · scale: core 3 · periphery 2 · signal 1 · ×2 if in title',
                 2048,
               ),
             },

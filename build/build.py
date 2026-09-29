@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-Assemble le workflow n8n à partir des fichiers de configuration et des
-nœuds Code.
+Assembles the n8n workflow from the configuration files and the Code
+nodes.
 
     config/*.yaml  +  src/*.js  ->  workflows/veille-cyber-ue.json
 
-Les nœuds Code portent des marqueurs `/* @@NOM@@ */ valeur` : le build
-remplace la valeur par ce que dit la configuration. Le défaut écrit dans le
-fichier reste valide, si bien qu'un nœud reste lisible et testable seul.
+Code nodes carry `/* @@NAME@@ */ value` markers: the build replaces the
+value with what the configuration says. The default written in the file
+stays valid, so a node remains readable and testable on its own.
 
-Usage :
-    docker compose run --rm builder          # construit
-    docker compose run --rm builder --check  # vérifie sans écrire
+Usage:
+    docker compose run --rm builder          # build
+    docker compose run --rm builder --check  # validate without writing
 """
 
 import json
@@ -27,39 +27,39 @@ SORTIE = RACINE / 'workflows'
 try:
     import yaml
 except ImportError:
-    sys.exit("PyYAML manquant. Lancer via : docker compose run --rm builder")
+    sys.exit("PyYAML missing. Run via: docker compose run --rm builder")
 
 
-# --- Chargement -------------------------------------------------------------
+# --- Loading -----------------------------------------------------------------
 
 def charger(nom):
     chemin = CONFIG / nom
     if not chemin.exists():
-        sys.exit(f"Configuration absente : {chemin.relative_to(RACINE)}")
+        sys.exit(f"Missing configuration: {chemin.relative_to(RACINE)}")
     with chemin.open(encoding='utf-8') as f:
         return yaml.safe_load(f)
 
 
 def js(valeur):
-    """Sérialise une valeur Python en littéral JavaScript lisible."""
+    """Serialises a Python value as a readable JavaScript literal."""
     return json.dumps(valeur, ensure_ascii=False, indent=2)
 
 
 def injecter(code, marqueurs):
     """
-    Remplace chaque `/* @@NOM@@ */ <défaut>` par la valeur fournie.
+    Replaces each `/* @@NAME@@ */ <default>` with the given value.
 
-    Le défaut peut être un objet, un tableau ou un scalaire ; on s'arrête au
-    premier point-virgule de fin de ligne, ce qui suffit pour nos formes.
+    The default may be an object, an array or a scalar; matching stops at the
+    first end-of-line semicolon, which is enough for the shapes we use.
     """
     for nom, valeur in marqueurs.items():
         motif = re.compile(
             r'/\* @@' + re.escape(nom) + r'@@ \*/\s*(?:\{[^;]*\}|\[[^;]*\]|[^;\n]+)'
         )
         if not motif.search(code):
-            sys.exit(f"Marqueur @@{nom}@@ introuvable — le nœud a-t-il été modifié ?")
-        # Le marqueur disparaît au profit d'un rappel de provenance : le
-        # fichier généré ne doit pas ressembler à un fichier réinjectable.
+            sys.exit(f"Marker @@{nom}@@ not found — has the node been modified?")
+        # The marker gives way to a provenance note: the generated file must
+        # not look like a file that can be fed back into the build.
         code = motif.sub(
             lambda _m, v=valeur, n=nom: f'/* {n} — config */ {js(v)}', code, count=1)
     return code
@@ -70,7 +70,7 @@ def lire_noeud(fichier, marqueurs=None):
     return injecter(code, marqueurs) if marqueurs else code
 
 
-# --- Construction -----------------------------------------------------------
+# --- Assembly ----------------------------------------------------------------
 
 def construire():
     wf_cfg = charger('workflow.yaml')
@@ -86,6 +86,7 @@ def construire():
         'TIMEOUT_MS': col['timeout_ms'],
         'CONCURRENCE': col['concurrence'],
         'MAX_ARTICLES_PAR_FLUX': col['max_articles_par_flux'],
+        'TAILLE_MAX_FLUX': col['taille_max_octets'],
     })
     code_scoring = lire_noeud('03-scoring.js', {
         'SEUIL_AXE': lex['seuils']['axe'],
@@ -135,7 +136,7 @@ def construire():
         noeud("Scoring par axe", "n8n-nodes-base.code", 2, [1020, 300],
               {"mode": "runOnceForAllItems", "jsCode": code_scoring}),
 
-        # --- archivage
+        # --- archiving
         noeud("Préparer l'insertion", "n8n-nodes-base.code", 2, [1260, 160],
               {"mode": "runOnceForAllItems", "jsCode": code_postgres}),
 
@@ -160,7 +161,7 @@ def construire():
               credentials=cred, onError="continueRegularOutput",
               retryOnFail=True, maxTries=3, waitBetweenTries=2000),
 
-        # --- journal
+        # --- log
         noeud("Préparer le journal", "n8n-nodes-base.code", 2, [1260, -20],
               {"mode": "runOnceForAllItems", "jsCode": code_journal}),
 
@@ -205,13 +206,13 @@ def construire():
     connexions = {
         "Toutes les 2 h": {"main": [[lien("Sources")]]},
         "Sources": {"main": [[lien("Collecte des flux")]]},
-        # La collecte alimente le scoring et, en parallèle, le journal.
+        # Collection feeds scoring and, in parallel, the log.
         "Collecte des flux": {"main": [[lien("Scoring par axe"), lien("Préparer le journal")]]},
         "Préparer le journal": {"main": [[lien("Journaliser les flux")]]},
         "Scoring par axe": {"main": [[lien("Préparer l'insertion"), lien("Score élevé ?")]]},
         "Préparer l'insertion": {"main": [[lien("Archiver en base")]]},
-        # sortie 0 = true ; sortie 1 = false, volontairement non connectée :
-        # ces articles sont archivés mais ne déclenchent pas d'alerte.
+        # output 0 = true; output 1 = false, deliberately left unconnected:
+        # these articles are archived but do not trigger an alert.
         "Score élevé ?": {"main": [[lien("Préparer message Discord")], []]},
         "Préparer message Discord": {"main": [[lien("Notifier l'équipe")]]},
     }
@@ -230,20 +231,20 @@ def construire():
     }
 
 
-# --- Vérifications ----------------------------------------------------------
+# --- Checks ------------------------------------------------------------------
 
 def verifier(wf):
-    """Garde-fous : un JSON syntaxiquement correct peut rester incohérent."""
+    """Safeguards: syntactically valid JSON can still be inconsistent."""
     noms = {n['name'] for n in wf['nodes']}
     erreurs = []
 
     for source, conn in wf['connections'].items():
         if source not in noms:
-            erreurs.append(f"connexion depuis un nœud inconnu : {source}")
+            erreurs.append(f"connection from an unknown node: {source}")
         for sortie in conn['main']:
             for l in sortie:
                 if l['node'] not in noms:
-                    erreurs.append(f"connexion vers un nœud inconnu : {l['node']}")
+                    erreurs.append(f"connection to an unknown node: {l['node']}")
 
     atteints = set()
 
@@ -264,14 +265,14 @@ def verifier(wf):
         if n['type'].endswith(('stickyNote', 'scheduleTrigger', 'manualTrigger')):
             continue
         if n['name'] not in atteints:
-            erreurs.append(f"nœud orphelin : {n['name']}")
+            erreurs.append(f"orphan node: {n['name']}")
 
     blob = json.dumps(wf, ensure_ascii=False)
     if 'discord.com/api/webhooks/' in blob:
-        erreurs.append("webhook Discord en dur dans le workflow")
+        erreurs.append("Discord webhook hardcoded in the workflow")
     restants = set(re.findall(r'@@(\w+)@@', blob))
     if restants:
-        erreurs.append(f"marqueurs non résolus : {', '.join(sorted(restants))}")
+        erreurs.append(f"unresolved markers: {', '.join(sorted(restants))}")
 
     return erreurs
 
@@ -282,7 +283,7 @@ def main():
 
     erreurs = verifier(wf)
     if erreurs:
-        print("Échec de la vérification :", file=sys.stderr)
+        print("Validation failed:", file=sys.stderr)
         for e in erreurs:
             print(f"  ✗ {e}", file=sys.stderr)
         sys.exit(1)
@@ -292,21 +293,21 @@ def main():
     nb_termes = sum(len(v) for axe in lex['axes'].values() for v in axe.values())
 
     if check:
-        print(f"✓ configuration valide — {len(wf['nodes'])} nœuds, "
-              f"{nb_sources} sources, {nb_termes} termes")
+        print(f"✓ configuration valid — {len(wf['nodes'])} nodes, "
+              f"{nb_sources} sources, {nb_termes} terms")
         return
 
     SORTIE.mkdir(exist_ok=True)
     principal = SORTIE / 'veille-cyber-ue.json'
     principal.write_text(json.dumps(wf, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
 
-    # Variante attendue par `n8n import:workflow`, qui veut un tableau.
+    # Variant expected by `n8n import:workflow`, which wants an array.
     (SORTIE / '_import.json').write_text(
         json.dumps([wf], ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
 
-    print(f"✓ {principal.relative_to(RACINE)} — {len(wf['nodes'])} nœuds, "
-          f"{nb_sources} sources, {nb_termes} termes")
-    print("  Pour déployer : docker compose up -d --force-recreate n8n-init")
+    print(f"✓ {principal.relative_to(RACINE)} — {len(wf['nodes'])} nodes, "
+          f"{nb_sources} sources, {nb_termes} terms")
+    print("  To deploy: docker compose up -d --force-recreate n8n-init")
 
 
 if __name__ == '__main__':

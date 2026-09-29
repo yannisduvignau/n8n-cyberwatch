@@ -1,40 +1,43 @@
 # ---------------------------------------------------------------------------
-# Réglages généraux du workflow.
+# General workflow settings.
 #
-# Ce fichier ne contient AUCUN secret : le webhook Discord et les accès
-# base vivent dans .env et dans les credentials n8n.
+# This file contains NO secrets: the Discord webhook and database access
+# live in .env and in the n8n credentials.
 #
-# Après modification : docker compose run --rm builder
+# After a change: docker compose run --rm builder
 # ---------------------------------------------------------------------------
 
-# Nom affiché dans l'interface n8n.
+# Name shown in the n8n UI.
 nom: "Veille — NIS2 · CRA · PQC · Cloud souverain"
 
 planification:
-  # Intervalle entre deux collectes, en heures.
+  # Interval between two collection runs, in hours.
   intervalle_heures: 2
 
 collecte:
-  # Âge maximal d'un article, en jours. Les blogs qui publient moins
-  # souvent deviennent invisibles au-delà : monter cette valeur les fait
-  # réapparaître, au prix de redites à chaque cycle.
+  # Maximum age of an article, in days. Blogs that publish less often
+  # become invisible beyond it: raising this value brings them back, at the
+  # cost of repeats on every cycle.
   age_max_jours: 7
-  # Délai d'attente par flux, en millisecondes.
+  # Timeout per feed, in milliseconds.
   timeout_ms: 15000
-  # Téléchargements simultanés. Au-delà de ~10, certains hébergeurs
-  # commencent à renvoyer des 429.
+  # Concurrent downloads. Above ~10, some hosts start returning 429s.
   concurrence: 6
-  # Garde-fou sur les flux fleuves : entrées lues par flux et par cycle.
+  # Safeguard against huge feeds: entries read per feed and per cycle.
   max_articles_par_flux: 40
+  # Hard cap on a feed's raw body, in bytes. max_articles_par_flux only limits
+  # entries AFTER parsing; this bounds the download so a hostile or spoofed
+  # feed cannot exhaust the worker's memory/CPU before any entry is counted.
+  taille_max_octets: 8388608 # 8 MiB
 
 notification:
-  # Score à partir duquel un article part sur Discord.
+  # Score from which an article is sent to Discord.
   seuil_alerte: 8
-  # Score à partir duquel l'embed passe en rouge (« très élevé »).
+  # Score from which the embed turns red ("very high").
   seuil_urgent: 15
 
 base:
-  # Nom du credential Postgres tel que créé dans n8n. Doit correspondre à
-  # celui que provisionne scripts/init-n8n.sh.
+  # Name of the Postgres credential as created in n8n. Must match the one
+  # provisioned by scripts/init-n8n.sh.
   credential: "Postgres — base veille"
   credential_id: "veille-db"
